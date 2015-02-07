@@ -1,2 +1,6 @@
-# ruby-zwaveasci
-Library to talk to ASCII-basd ZWave interface (VRC0P)
+ruby-zwaveascii
+===============
+
+Ruby interface library for controlling ZWave home automation devices via the
+VRC0P ASCII interface module.
+
