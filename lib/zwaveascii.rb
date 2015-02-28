@@ -3,7 +3,7 @@ require 'serialport'
 
 module ZWave
   class ASCII
-    VERSION = "0.0.2"
+    VERSION = "0.0.3"
 
     def initialize(port, speed = 9600, debug = false)
       @debug = debug
@@ -50,32 +50,52 @@ module ZWave
 	args = matchdata[3].split(",")
 	case(cmdclass)
 	  when 0x20
-	    return BasicEvent.new cmdclass, args[0], args[1]
+	    return BasicEvent.new node, cmdclass, args[0], args[1]
 	  when 0x2B
-	    return SceneActivationEvent.new cmdclass, args[1]
+	    return SceneActivationEvent.new node, cmdclass, args[1]
 	  else
-	    return Event.new cmdclass
+	    return Event.new node, cmdclass
 	end
     end
 
-    def send_cmd(cmd, expected_response_lines)
+    def send_cmd(cmd, expected_response_frames)
     	debug_msg "Writing: #{cmd}"
     	@port.write "#{cmd}\n"
-	expected_response_lines.times do
-          p @port.readline
+	return_val = []
+	expected_response_frames.each do |expected_type|
+          # TODO: this will hang forever if something goes wrong
+	  while(@port.eof?) do 
+	    sleep 0.1
+	  end
+	  response = @port.readline
+	  type = response[1].chr
+	  code = response[2..-1].to_i
+	  debug_msg "Got response type '#{type}'"
+	  raise(IOError, "Expected #{expected_type} frame but got #{type}") unless type == expected_type
+	  case type
+	    when "E"
+	      raise(IOError, "Received abnormal E code #{code}") unless code == 0
+	    when "X"
+	      raise(IOError, "Received abnormal X code #{code}") unless code == 0
+	    when "N"
+	      return_val.push response[1..-1]
+	  end
 	end
+	return_val
     end
 
     def switch_on(address)
-      send_cmd ">N#{address}ON", 2
+      send_cmd ">N#{address}ON", ["E", "X"]
     end
     
     def switch_off(address)
-      send_cmd ">N#{address}OFF", 2
+      send_cmd ">N#{address}OFF", ["E", "X"]
     end
     
     def dim(address, level)
-      send_cmd ">N#{address}L#{level}", 2
+      level = 99 if level > 99;	# there is no 100, it's 0-99
+      level = 0 if level < 0;
+      send_cmd ">N#{address}L#{level}", ["E", "X"]
     end
   end
   class Node
@@ -110,9 +130,10 @@ module ZWave
   end
 
   class Event
-    attr_reader :cmdclass
+    attr_reader :node, :cmdclass
     
-    def initialize(cmdclass)
+    def initialize(node, cmdclass)
+      @node = node
       @cmdclass = cmdclass
     end
   end
@@ -120,19 +141,19 @@ module ZWave
   class BasicEvent < Event
     attr_reader :type, :value 
     
-    def initialize(cmdclass, type, value)
+    def initialize(node, cmdclass, type, value)
       @type = type
       @value = value
-      super cmdclass
+      super node, cmdclass
     end
   end
 
   class SceneActivationEvent < Event
     attr_reader :scene
 
-    def initialize(cmdclass, scene)
-      @scene = scene
-      super cmdclass
+    def initialize(node, cmdclass, scene)
+      @scene = scene.to_i
+      super node, cmdclass
     end
   end
 end
