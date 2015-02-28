@@ -3,7 +3,7 @@ require 'serialport'
 
 module ZWave
   class ASCII
-    VERSION = "0.0.4"
+    VERSION = "0.0.5"
     TIMEOUT = 2
 
     def initialize(port, speed = 9600, debug = false)
@@ -104,7 +104,13 @@ module ZWave
       level = 0 if level < 0;
       send_cmd ">N#{address}L#{level}", ["E", "X"]
     end
+
+    def get_level(address)
+      response = send_cmd(">?N#{address}", ["E", "X", "N"])
+      response[0][6..-1].to_i
+    end
   end
+
   class Node
     def initialize(controller, address)
       @controller = controller
@@ -124,6 +130,10 @@ module ZWave
         @controller.switch_off @address
       end
     end
+
+    def on?
+      @controller.get_level(@address) != 0 ? true : false
+    end
   end
 
   class Dimmer < Switch
@@ -133,6 +143,11 @@ module ZWave
 
     def level=(level)
     	@controller.dim @address, level
+    end
+
+    def level
+      # map 0-99 to 0-100 so we output percentage
+      @controller.get_level(@address) * 100 / 99;
     end
   end
 
