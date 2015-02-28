@@ -3,7 +3,8 @@ require 'serialport'
 
 module ZWave
   class ASCII
-    VERSION = "0.0.3"
+    VERSION = "0.0.4"
+    TIMEOUT = 2
 
     def initialize(port, speed = 9600, debug = false)
       @debug = debug
@@ -63,10 +64,16 @@ module ZWave
     	@port.write "#{cmd}\n"
 	return_val = []
 	expected_response_frames.each do |expected_type|
-          # TODO: this will hang forever if something goes wrong
-	  while(@port.eof?) do 
+	  timed_out = true
+	  for timeout_done in (0..TIMEOUT).step(0.1) do
 	    sleep 0.1
+	    if(!@port.eof?) then
+	      timed_out = false
+	      break
+	    end
+	    debug_msg "Retrying read, #{TIMEOUT - timeout_done} seconds left"
 	  end
+	  raise IOError, "Timeout waiting for response from interface" if timed_out
 	  response = @port.readline
 	  type = response[1].chr
 	  code = response[2..-1].to_i
