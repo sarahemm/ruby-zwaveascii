@@ -1,5 +1,7 @@
 require 'rubygems'
 require 'serialport'
+require 'zwaveascii/events.rb'
+require 'zwaveascii/devices.rb'
 
 module ZWave
   class ASCII
@@ -113,95 +115,6 @@ module ZWave
     def get_level(address)
       response = send_cmd(">?N#{address}", ["E", "X", "N"])
       response[0][6..-1].to_i
-    end
-  end
-
-  class Node
-    def initialize(controller, address)
-      @controller = controller
-      @address = address
-    end
-  end
-  
-  class Switch < Node
-    def initialize(controller, address)
-      super controller, address
-    end
-    
-    def on=(state)
-      if(state) then
-        @controller.switch_on @address
-      else
-        @controller.switch_off @address
-      end
-    end
-
-    def on?
-      @controller.get_level(@address) != 0 ? true : false
-    end
-  end
-
-  class Dimmer < Switch
-    def initialize(controller, address)
-      super controller, address
-    end
-
-    def level=(level)
-    	@controller.dim @address, level
-    end
-
-    def level
-      # map 0-99 to 0-100 so we output percentage
-      @controller.get_level(@address) * 100 / 99;
-    end
-  end
-
-  class Event
-    attr_reader :node, :cmdclass
-    
-    def initialize(node, cmdclass)
-      @node = node
-      @cmdclass = cmdclass
-    end
-  end
-  
-  class BasicEvent < Event
-    attr_reader :type, :value 
-    
-    def initialize(node, cmdclass, type, value)
-      @type = type
-      @value = value
-      super node, cmdclass
-    end
-  end
-
-  class SceneActivationEvent < Event
-    attr_reader :scene
-
-    def initialize(node, cmdclass, scene)
-      @scene = scene.to_i
-      super node, cmdclass
-    end
-  end
-
-  class NotificationEvent < Event
-    attr_reader :type, :code_used
-    
-    def initialize(node, cmdclass, type, code_used)
-      case type
-        when 0x12
-	  @type = :locked
-	when 0x13
-	  @type = :unlocked
-	when 0x15
-	  @type = :manually_locked
-	when 0x16
-	  @type = :manually_unlocked
-	else
-	  @type = type
-      end
-      @code_used = code_used
-      super node, cmdclass
     end
   end
 end
