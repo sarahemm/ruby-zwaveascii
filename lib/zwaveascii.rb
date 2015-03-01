@@ -3,7 +3,7 @@ require 'serialport'
 
 module ZWave
   class ASCII
-    VERSION = "0.0.5"
+    VERSION = "0.0.6"
     TIMEOUT = 2
 
     def initialize(port, speed = 9600, debug = false)
@@ -46,6 +46,9 @@ module ZWave
 
     def parse_event(data)
     	matchdata = /<N(\d+):(\d+),(.*)/.match(data)
+	# security responses are a bit different
+    	matchdata = /<n(\d+):\d+,(\d+),(.*)/.match(data) if !matchdata
+	
 	node = matchdata[1].to_i
 	cmdclass = matchdata[2].to_i
 	args = matchdata[3].split(",")
@@ -54,6 +57,8 @@ module ZWave
 	    return BasicEvent.new node, cmdclass, args[0], args[1]
 	  when 0x2B
 	    return SceneActivationEvent.new node, cmdclass, args[1]
+	  when 0x71
+	    return NotificationEvent.new node, cmdclass, args[1].to_i, (args[7] ? args[7].to_i : nil)
 	  else
 	    return Event.new node, cmdclass
 	end
@@ -175,6 +180,27 @@ module ZWave
 
     def initialize(node, cmdclass, scene)
       @scene = scene.to_i
+      super node, cmdclass
+    end
+  end
+
+  class NotificationEvent < Event
+    attr_reader :type, :code_used
+    
+    def initialize(node, cmdclass, type, code_used)
+      case type
+        when 0x12
+	  @type = :locked
+	when 0x13
+	  @type = :unlocked
+	when 0x15
+	  @type = :manually_locked
+	when 0x16
+	  @type = :manually_unlocked
+	else
+	  @type = type
+      end
+      @code_used = code_used
       super node, cmdclass
     end
   end
