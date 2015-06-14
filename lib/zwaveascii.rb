@@ -5,8 +5,8 @@ require 'zwaveascii/devices.rb'
 
 module ZWave
   class ASCII
-    VERSION = "0.0.6"
-    TIMEOUT = 2
+    VERSION = "0.0.8"
+    TIMEOUT = 3
 
     def initialize(port, speed = 9600, debug = false)
       @debug = debug
@@ -35,6 +35,10 @@ module ZWave
     def dimmer(address)
     	Dimmer.new self, address
     end
+    
+    def door_lock(address)
+    	DoorLock.new self, address
+    end
 
     def fetch_events
     	return nil if @port.eof?
@@ -47,6 +51,7 @@ module ZWave
     end
 
     def parse_event(data)
+    	debug_msg "Read Event: #{data.chomp}"
     	matchdata = /<N(\d+):(\d+),(.*)/.match(data)
 	# security responses are a bit different
     	matchdata = /<n(\d+):\d+,(\d+),(.*)/.match(data) if !matchdata
@@ -66,7 +71,7 @@ module ZWave
 	end
     end
 
-    def send_cmd(cmd, expected_response_frames)
+    def send_cmd(cmd, expected_response_frames, node = nil)
     	debug_msg "Writing: #{cmd}"
     	@port.write "#{cmd}\n"
 	return_val = []
@@ -84,14 +89,24 @@ module ZWave
 	  response = @port.readline
 	  type = response[1].chr
 	  code = response[2..-1].to_i
-	  debug_msg "Got response type '#{type}'"
+	  debug_msg "Got response '#{response}'"
+	  if(type == 'N' or type == 'n') then
+	    # it's possible for an unrelated node to send a report while we're
+	    # waiting for this node, ignore this for now but FIXME later
+	    # if we weren't passed node at all, we're not expecting any N responses
+	    # so always assume we can ignore it.
+	    reporting_node = /[Nn](\d+)/.match(response[2..-1])[1].to_i
+	    if(!node or reporting_node != node) then
+	      debug_msg "Got unrelated node report from #{reporting_node}, ignoring."
+	    end
+	  end
 	  raise(IOError, "Expected #{expected_type} frame but got #{type}") unless type == expected_type
 	  case type
 	    when "E"
 	      raise(IOError, "Received abnormal E code #{code}") unless code == 0
 	    when "X"
 	      raise(IOError, "Received abnormal X code #{code}") unless code == 0
-	    when "N"
+	    when "N", "n"
 	      return_val.push response[1..-1]
 	  end
 	end
@@ -113,7 +128,7 @@ module ZWave
     end
 
     def get_level(address)
-      response = send_cmd(">?N#{address}", ["E", "X", "N"])
+      response = send_cmd(">?N#{address}", ["E", "X", "N"], address)
       response[0][6..-1].to_i
     end
   end
