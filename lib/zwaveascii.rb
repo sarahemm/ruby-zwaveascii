@@ -3,9 +3,21 @@ require 'serialport'
 require 'zwaveascii/events.rb'
 require 'zwaveascii/devices.rb'
 
+class Array
+  # same as .delete but only delete the first occurance
+  def delete_first(delete_val)
+    self.each_index do |idx|
+      next if self[idx] != delete_val
+      self.delete_at idx
+      return true
+    end
+    return false
+  end
+end
+
 module ZWave
   class ASCII
-    VERSION = "0.0.8"
+    VERSION = "0.0.9"
     TIMEOUT = 3
 
     def initialize(port, speed = 9600, debug = false)
@@ -75,7 +87,7 @@ module ZWave
     	debug_msg "Writing: #{cmd}"
     	@port.write "#{cmd}\n"
 	return_val = []
-	expected_response_frames.each do |expected_type|
+	while true do
 	  timed_out = true
 	  for timeout_done in (0..TIMEOUT).step(0.1) do
 	    sleep 0.1
@@ -90,17 +102,7 @@ module ZWave
 	  type = response[1].chr
 	  code = response[2..-1].to_i
 	  debug_msg "Got response '#{response}'"
-	  if(type == 'N' or type == 'n') then
-	    # it's possible for an unrelated node to send a report while we're
-	    # waiting for this node, ignore this for now but FIXME later
-	    # if we weren't passed node at all, we're not expecting any N responses
-	    # so always assume we can ignore it.
-	    reporting_node = /[Nn](\d+)/.match(response[2..-1])[1].to_i
-	    if(!node or reporting_node != node) then
-	      debug_msg "Got unrelated node report from #{reporting_node}, ignoring."
-	    end
-	  end
-	  raise(IOError, "Expected #{expected_type} frame but got #{type}") unless type == expected_type
+          debug_msg "Received unexpected frame #{type} while waiting for #{expected_response_frames}, ignoring." if !expected_response_frames.delete_first(type)
 	  case type
 	    when "E"
 	      raise(IOError, "Received abnormal E code #{code}") unless code == 0
@@ -109,6 +111,10 @@ module ZWave
 	    when "N", "n"
 	      return_val.push response[1..-1]
 	  end
+          break if expected_response_frames.length == 0
+	  # the timeout logic in the read section above handles breaking out of
+	  # this loop if we never get something we're waiting for
+	  debug_msg "Still waiting for frames #{expected_response_frames}..."
 	end
 	return_val
     end
