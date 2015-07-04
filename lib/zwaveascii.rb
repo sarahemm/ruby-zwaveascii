@@ -17,7 +17,7 @@ end
 
 module ZWave
   class ASCII
-    VERSION = "0.0.9"
+    VERSION = "0.1.0"
     TIMEOUT = 3
 
     def initialize(port, speed = 9600, debug = false)
@@ -102,15 +102,21 @@ module ZWave
 	  type = response[1].chr
 	  code = response[2..-1].to_i
 	  debug_msg "Got response '#{response}'"
-          debug_msg "Received unexpected frame #{type} while waiting for #{expected_response_frames}, ignoring." if !expected_response_frames.delete_first(type)
+          debug_msg "Received unexpected frame #{type} while waiting for #{expected_response_frames}, ignoring." if !expected_response_frames.include? type
 	  case type
 	    when "E"
 	      raise(IOError, "Received abnormal E code #{code}") unless code == 0
 	    when "X"
 	      raise(IOError, "Received abnormal X code #{code}") unless code == 0
 	    when "N", "n"
+	      node_addr = /[Nn](\d+)/.match(response)[1]
+              if(node_addr.to_i != node.to_i) then
+	        puts "Ignoring node response from node #{node_addr}, expecting resonse for node #{node}."
+		next
+	      end
 	      return_val.push response[1..-1]
 	  end
+          expected_response_frames.delete_first type
           break if expected_response_frames.length == 0
 	  # the timeout logic in the read section above handles breaking out of
 	  # this loop if we never get something we're waiting for
