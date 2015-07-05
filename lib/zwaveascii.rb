@@ -110,7 +110,7 @@ module ZWave
 	      raise(IOError, "Received abnormal X code #{code}") unless code == 0
 	    when "N", "n"
 	      node_addr = /[Nn](\d+)/.match(response)[1]
-              if(node_addr.to_i != node.to_i) then
+              if(node && node_addr.to_i != node.to_i) then
 	        puts "Ignoring node response from node #{node_addr}, expecting resonse for node #{node}."
 		next
 	      end
