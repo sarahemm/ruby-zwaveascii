@@ -52,6 +52,14 @@ module ZWave
     	DoorLock.new self, address
     end
 
+    # tell the controller to reset its internal state and flush our buffer
+    def abort
+      while(!@port.eof?) do
+        @port.read
+      end
+      send_cmd "AB", ["E"]
+    end
+
     def fetch_events
     	return nil if @port.eof?
     	while(!@port.eof?) do
@@ -101,7 +109,7 @@ module ZWave
 	  response = @port.readline
 	  type = response[1].chr
 	  code = response[2..-1].to_i
-	  debug_msg "Got response '#{response}'"
+	  debug_msg "Got response '#{response.strip}'"
           debug_msg "Received unexpected frame #{type} while waiting for #{expected_response_frames}, ignoring." if !expected_response_frames.include? type
 	  case type
 	    when "E"
